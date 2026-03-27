@@ -150,8 +150,66 @@ export async function searchNDLByISBN(isbn: string): Promise<NDLBook | null> {
 }
 
 /**
- * Claude出力の書籍情報をNDLデータで補完
- * 複数の検索戦略を並列実行して高速化
+ * Google Books APIで書影URLを取得
+ */
+async function fetchGoogleBooksThumbnail(
+  title: string,
+  author: string,
+): Promise<string | null> {
+  try {
+    const query = `${title} ${author}`;
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=5&printType=books`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const items = data.items;
+    if (!items || items.length === 0) return null;
+
+    // タイトル類似度で最適な結果を選ぶ
+    const normalize = (s: string) =>
+      s.replace(/[\s　\u3000]/g, '').replace(/[（）()「」『』【】]/g, '').toLowerCase();
+    const target = normalize(title);
+
+    let bestThumbnail: string | null = null;
+    let bestScore = -1;
+
+    for (const item of items) {
+      const v = item.volumeInfo;
+      const itemTitle = normalize(v.title ?? '');
+      const thumbnail = v.imageLinks?.thumbnail ?? null;
+
+      if (!thumbnail) continue;
+
+      let score = 0;
+      if (itemTitle === target) {
+        score = 100;
+      } else if (itemTitle.includes(target) || target.includes(itemTitle)) {
+        score = 80;
+      } else {
+        let matchLen = 0;
+        for (let i = 0; i < Math.min(itemTitle.length, target.length); i++) {
+          if (itemTitle[i] === target[i]) matchLen++;
+          else break;
+        }
+        score = matchLen;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestThumbnail = thumbnail.replace('http://', 'https://');
+      }
+    }
+
+    // 最低限のスコア（3文字以上一致）がないと別の本の書影を返してしまう
+    return bestScore >= 3 ? bestThumbnail : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Claude出力の書籍情報をNDLデータ + Google Books書影で補完
  */
 export async function enrichBook(
   title: string,
@@ -160,25 +218,48 @@ export async function enrichBook(
 ): Promise<NDLBook | null> {
   const surname = extractSurname(author);
 
-  // 並列で複数検索を同時実行（高速化）
-  const searches: Promise<NDLBook | null>[] = [];
+  // NDL検索 + Google Books書影を並列実行（高速化）
+  const [ndlResults, googleThumbnail] = await Promise.all([
+    // NDL: 複数戦略を並列
+    Promise.all([
+      surname ? searchNDL(title, surname) : Promise.resolve(null),
+      searchNDL(title),
+    ]),
+    // Google Books: 書影のみ取得
+    fetchGoogleBooksThumbnail(title, author),
+  ]);
 
-  // 戦略1: タイトル+著者姓
-  if (surname) {
-    searches.push(searchNDL(title, surname));
+  // NDL結果からベストを選択
+  let bestResult: NDLBook | null = null;
+  for (const result of ndlResults) {
+    if (result?.isbn) { bestResult = result; break; }
   }
-  // 戦略2: タイトルのみ
-  searches.push(searchNDL(title));
-
-  const results = await Promise.all(searches);
-
-  // ISBNありの結果を優先して返す
-  for (const result of results) {
-    if (result?.isbn) return result;
+  if (!bestResult) {
+    for (const result of ndlResults) {
+      if (result) { bestResult = result; break; }
+    }
   }
-  // ISBNなしでもメタデータがあれば返す
-  for (const result of results) {
-    if (result) return result;
+
+  // 書影の優先順位: NDL書影 → Google Books書影
+  if (bestResult) {
+    if (!bestResult.thumbnailUrl && googleThumbnail) {
+      bestResult.thumbnailUrl = googleThumbnail;
+    }
+    return bestResult;
+  }
+
+  // NDLでヒットしなくてもGoogle Books書影があれば返す
+  if (googleThumbnail) {
+    return {
+      title,
+      author,
+      publisher: null,
+      isbn,
+      ndc: null,
+      publishedYear: null,
+      thumbnailUrl: googleThumbnail,
+      ndlLink: null,
+    };
   }
 
   return null;
