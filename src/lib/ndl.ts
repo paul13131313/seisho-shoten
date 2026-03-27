@@ -147,20 +147,50 @@ export async function searchNDLByISBN(isbn: string): Promise<NDLBook | null> {
 
 /**
  * Claude出力の書籍情報をNDLデータで補完
- * ※ClaudeのISBNは間違いが多いため、タイトル検索を優先する
+ * 複数の検索戦略でフォールバック
  */
 export async function enrichBook(
   title: string,
   author: string,
   isbn: string | null,
 ): Promise<NDLBook | null> {
-  // 1. タイトル+著者で検索（最も正確）
-  const byTitle = await searchNDL(title, author);
+  // 1. タイトル全文で検索（著者なし — 著者名の表記揺れを避ける）
+  const byTitle = await searchNDL(title);
   if (byTitle) return byTitle;
 
-  // 2. タイトルのみで検索
-  const byTitleOnly = await searchNDL(title);
-  if (byTitleOnly) return byTitleOnly;
+  // 2. タイトル+著者の姓（最初の空白/カンマ前）で検索
+  const surname = extractSurname(author);
+  if (surname) {
+    const byTitleAuthor = await searchNDL(title, surname);
+    if (byTitleAuthor) return byTitleAuthor;
+  }
+
+  // 3. ISBNがある場合（Claudeの出力が正しい可能性もある）
+  if (isbn) {
+    const byIsbn = await searchNDLByISBN(isbn);
+    if (byIsbn) return byIsbn;
+  }
+
+  // 4. タイトルの主要部分のみで検索（サブタイトル除去）
+  const mainTitle = title.split(/[：:—–\-\/]/).at(0)?.trim();
+  if (mainTitle && mainTitle !== title) {
+    const byMainTitle = await searchNDL(mainTitle);
+    if (byMainTitle) return byMainTitle;
+  }
 
   return null;
+}
+
+/**
+ * 著者名から姓を抽出（表記揺れ対策）
+ */
+function extractSurname(author: string): string | null {
+  if (!author) return null;
+  // 「山田 太郎」→「山田」、「トム・ラス」→「ラス」
+  const parts = author.split(/[\s,、・]/);
+  // 日本語名なら最初、外国名なら最後
+  if (/^[ぁ-んァ-ヶ一-龠]/.test(author)) {
+    return parts[0] || null;
+  }
+  return parts[parts.length - 1] || null;
 }
