@@ -65,6 +65,17 @@ export default function BookCard({ book, index }: BookCardProps) {
           {book.publisher}{book.publishedYear ? ` (${book.publishedYear})` : ''}
         </p>
       )}
+
+      {/* Amazonで探すボタン */}
+      <a
+        href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(book.title + ' ' + book.author)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 text-[10px] px-3 py-1 border border-[var(--border)] rounded-full
+                   text-[var(--text-light)] hover:border-[#ff9900] hover:text-[#ff9900] transition-colors"
+      >
+        Amazonで探す →
+      </a>
     </div>
   );
 }
