@@ -27,7 +27,13 @@ function HomeContent() {
         body: JSON.stringify({ query }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('サーバーからの応答を解析できませんでした。もう一度お試しください');
+      }
 
       if (!res.ok) {
         throw new Error(data.error ?? '選書中にエラーが発生しました');
