@@ -151,7 +151,7 @@ export async function searchNDLByISBN(isbn: string): Promise<NDLBook | null> {
 
 /**
  * Claude出力の書籍情報をNDLデータで補完
- * 複数の検索戦略を並列実行し、最初にヒットしたものを返す
+ * 複数の検索戦略を並列実行して高速化
  */
 export async function enrichBook(
   title: string,
@@ -160,33 +160,28 @@ export async function enrichBook(
 ): Promise<NDLBook | null> {
   const surname = extractSurname(author);
 
-  // 戦略1: タイトル+著者姓（最も正確な組み合わせ）
+  // 並列で複数検索を同時実行（高速化）
+  const searches: Promise<NDLBook | null>[] = [];
+
+  // 戦略1: タイトル+著者姓
   if (surname) {
-    const result = await searchNDL(title, surname);
-    if (result?.isbn) return result;
+    searches.push(searchNDL(title, surname));
   }
-
   // 戦略2: タイトルのみ
-  const byTitle = await searchNDL(title);
-  if (byTitle?.isbn) return byTitle;
+  searches.push(searchNDL(title));
 
-  // 戦略3: サブタイトル除去 + 著者姓
-  const mainTitle = title.split(/[：:—–\-\/\s]/).at(0)?.trim();
-  if (mainTitle && mainTitle.length >= 3 && mainTitle !== title) {
-    const result = surname
-      ? await searchNDL(mainTitle, surname)
-      : await searchNDL(mainTitle);
+  const results = await Promise.all(searches);
+
+  // ISBNありの結果を優先して返す
+  for (const result of results) {
     if (result?.isbn) return result;
   }
-
-  // 戦略4: ISBN（Claude出力、最終手段）
-  if (isbn) {
-    const byIsbn = await searchNDLByISBN(isbn);
-    if (byIsbn) return byIsbn;
+  // ISBNなしでもメタデータがあれば返す
+  for (const result of results) {
+    if (result) return result;
   }
 
-  // ISBNなしでもヒットしていれば返す（書影はないがメタデータはある）
-  return byTitle;
+  return null;
 }
 
 /**

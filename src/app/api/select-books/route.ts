@@ -3,7 +3,7 @@ import { selectBooks } from '@/lib/claude';
 import { enrichBook } from '@/lib/ndl';
 import { INPUT_MIN_LENGTH, INPUT_MAX_LENGTH } from '@/lib/constants';
 
-export const maxDuration = 30; // Vercel function timeout
+export const maxDuration = 60; // Vercel Hobby: 最大60秒、Free: 最大10秒
 
 export interface BookResult {
   order: number;
