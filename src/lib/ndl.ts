@@ -30,18 +30,16 @@ function thumbnailUrl(isbn: string | null): string | null {
 }
 
 /**
- * NDL OpenSearchでタイトル+著者検索
- * ※NDLのtitleパラメータは長いタイトルだとヒットしないため、
- *   先頭15文字に切り詰めて部分一致検索する
+ * NDL OpenSearchで検索し、最もタイトルが近い結果を返す
  */
 export async function searchNDL(
   title: string,
   author?: string,
 ): Promise<NDLBook | null> {
   // タイトルを短くして検索精度を上げる（NDLは長いタイトルだとヒットしない）
-  const shortTitle = title.length > 15 ? title.slice(0, 15) : title;
+  const shortTitle = title.length > 10 ? title.slice(0, 10) : title;
 
-  const params = new URLSearchParams({ cnt: '5' });
+  const params = new URLSearchParams({ cnt: '10' });
   if (shortTitle) params.set('title', shortTitle);
   if (author) params.set('creator', author);
 
@@ -56,7 +54,8 @@ export async function searchNDL(
 
   if (!items || items.length === 0) return null;
 
-  const item = items[0];
+  // 複数ヒットから最もタイトルが近い（かつISBNがある）ものを選ぶ
+  const item = findBestMatch(items, title);
 
   // ISBN抽出
   const ids = item['dc:identifier'] ?? [];
@@ -152,38 +151,95 @@ export async function searchNDLByISBN(isbn: string): Promise<NDLBook | null> {
 
 /**
  * Claude出力の書籍情報をNDLデータで補完
- * 複数の検索戦略でフォールバック
+ * 複数の検索戦略を並列実行し、最初にヒットしたものを返す
  */
 export async function enrichBook(
   title: string,
   author: string,
   isbn: string | null,
 ): Promise<NDLBook | null> {
-  // 1. タイトル全文で検索（著者なし — 著者名の表記揺れを避ける）
-  const byTitle = await searchNDL(title);
-  if (byTitle) return byTitle;
-
-  // 2. タイトル+著者の姓（最初の空白/カンマ前）で検索
   const surname = extractSurname(author);
+
+  // 戦略1: タイトル+著者姓（最も正確な組み合わせ）
   if (surname) {
-    const byTitleAuthor = await searchNDL(title, surname);
-    if (byTitleAuthor) return byTitleAuthor;
+    const result = await searchNDL(title, surname);
+    if (result?.isbn) return result;
   }
 
-  // 3. ISBNがある場合（Claudeの出力が正しい可能性もある）
+  // 戦略2: タイトルのみ
+  const byTitle = await searchNDL(title);
+  if (byTitle?.isbn) return byTitle;
+
+  // 戦略3: サブタイトル除去 + 著者姓
+  const mainTitle = title.split(/[：:—–\-\/\s]/).at(0)?.trim();
+  if (mainTitle && mainTitle.length >= 3 && mainTitle !== title) {
+    const result = surname
+      ? await searchNDL(mainTitle, surname)
+      : await searchNDL(mainTitle);
+    if (result?.isbn) return result;
+  }
+
+  // 戦略4: ISBN（Claude出力、最終手段）
   if (isbn) {
     const byIsbn = await searchNDLByISBN(isbn);
     if (byIsbn) return byIsbn;
   }
 
-  // 4. タイトルの主要部分のみで検索（サブタイトル除去）
-  const mainTitle = title.split(/[：:—–\-\/]/).at(0)?.trim();
-  if (mainTitle && mainTitle !== title) {
-    const byMainTitle = await searchNDL(mainTitle);
-    if (byMainTitle) return byMainTitle;
+  // ISBNなしでもヒットしていれば返す（書影はないがメタデータはある）
+  return byTitle;
+}
+
+/**
+ * 検索結果から最もタイトルが近い（かつISBN付き優先）アイテムを選ぶ
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findBestMatch(items: any[], targetTitle: string): any {
+  const normalize = (s: string) =>
+    s.replace(/[\s　\u3000]/g, '').replace(/[（）()「」『』【】]/g, '').toLowerCase();
+
+  const target = normalize(targetTitle);
+
+  let bestItem = items[0];
+  let bestScore = -1;
+
+  for (const item of items) {
+    const itemTitle = normalize(
+      (Array.isArray(item['dc:title']) ? item['dc:title'][0] : item['dc:title'])?.toString() ?? '',
+    );
+
+    // タイトルの一致度スコア
+    let score = 0;
+
+    // 完全一致 or 包含
+    if (itemTitle === target) {
+      score = 100;
+    } else if (itemTitle.includes(target) || target.includes(itemTitle)) {
+      score = 80;
+    } else {
+      // 先頭一致の文字数
+      let matchLen = 0;
+      for (let i = 0; i < Math.min(itemTitle.length, target.length); i++) {
+        if (itemTitle[i] === target[i]) matchLen++;
+        else break;
+      }
+      score = matchLen;
+    }
+
+    // ISBNがある方を優先
+    const ids = item['dc:identifier'] ?? [];
+    const hasIsbn = (Array.isArray(ids) ? ids : [ids]).some(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (id: any) => typeof id === 'object' && id['@_xsi:type'] === 'dcndl:ISBN',
+    );
+    if (hasIsbn) score += 10;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestItem = item;
+    }
   }
 
-  return null;
+  return bestItem;
 }
 
 /**
