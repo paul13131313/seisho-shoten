@@ -45,7 +45,7 @@ const SYSTEM_PROMPT = `あなたは「生成書店」の選書AIです。
 
 export async function selectBooks(query: string): Promise<ClaudeResponse> {
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-haiku-4-20250414',
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: [
@@ -61,10 +61,21 @@ export async function selectBooks(query: string): Promise<ClaudeResponse> {
     throw new Error('Claude APIからテキスト応答がありませんでした');
   }
 
-  const parsed = JSON.parse(textBlock.text) as ClaudeResponse;
+  // マークダウンのコードブロックで囲まれている場合を除去
+  let jsonText = textBlock.text.trim();
+  if (jsonText.startsWith('```')) {
+    jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+  }
+
+  let parsed: ClaudeResponse;
+  try {
+    parsed = JSON.parse(jsonText) as ClaudeResponse;
+  } catch {
+    throw new Error('選書結果の解析に失敗しました。もう一度お試しください');
+  }
 
   if (!parsed.storyline || !parsed.books || parsed.books.length !== 3) {
-    throw new Error('Claude APIの応答形式が不正です');
+    throw new Error('選書結果の形式が不正です。もう一度お試しください');
   }
 
   return parsed;
