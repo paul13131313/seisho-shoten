@@ -41,10 +41,10 @@ function HomeContent() {
 
       setResult(data);
 
-      // URLにクエリを追加（履歴には残す）
-      const url = new URL(window.location.href);
-      url.searchParams.set('q', query);
-      window.history.pushState({}, '', url.toString());
+      // 固有ページURLに遷移（履歴に残す）
+      if (data.id) {
+        window.history.pushState({}, '', `/s/${data.id}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '選書中にエラーが発生しました');
     } finally {

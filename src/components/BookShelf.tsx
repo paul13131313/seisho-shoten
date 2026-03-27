@@ -9,7 +9,11 @@ interface BookShelfProps {
 }
 
 export default function BookShelf({ result, onReset }: BookShelfProps) {
-  const shareText = `「${result.query}」\nAIに選んでもらった3冊 📚\n\n${result.books.map((b) => `${b.order}. ${b.title}`).join('\n')}\n\nhttps://seisho-shoten.vercel.app/?q=${encodeURIComponent(result.query)}\n\n#生成書店`;
+  const pageUrl = result.id
+    ? `https://seisho-shoten.vercel.app/s/${result.id}`
+    : `https://seisho-shoten.vercel.app/?q=${encodeURIComponent(result.query)}`;
+
+  const shareText = `「${result.query}」\nAIに選んでもらった3冊 📚\n\n${result.books.map((b) => `${b.order}. ${b.title}`).join('\n')}\n\n${pageUrl}\n\n#生成書店`;
 
   const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}`;
 

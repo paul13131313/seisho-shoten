@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server';
+import { nanoid } from 'nanoid';
 import { selectBooks } from '@/lib/claude';
 import { enrichBook } from '@/lib/ndl';
+import { supabase } from '@/lib/supabase';
 import { INPUT_MIN_LENGTH, INPUT_MAX_LENGTH } from '@/lib/constants';
 
-export const maxDuration = 60; // Vercel Hobby: 最大60秒、Free: 最大10秒
+export const maxDuration = 60;
 
 export interface BookResult {
   order: number;
@@ -20,6 +22,7 @@ export interface BookResult {
 }
 
 export interface SelectBooksResponse {
+  id: string; // 保存ID（シェア用）
   query: string;
   storyline: string;
   books: BookResult[];
@@ -68,7 +71,17 @@ export async function POST(request: NextRequest) {
       }),
     );
 
+    // Step 3: Supabaseに保存
+    const id = nanoid(8);
+    await supabase.from('selections').insert({
+      id,
+      query,
+      storyline: claudeResult.storyline,
+      books: enrichedBooks,
+    });
+
     const response: SelectBooksResponse = {
+      id,
       query,
       storyline: claudeResult.storyline,
       books: enrichedBooks,
