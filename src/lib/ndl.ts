@@ -147,23 +147,18 @@ export async function searchNDLByISBN(isbn: string): Promise<NDLBook | null> {
 
 /**
  * Claude出力の書籍情報をNDLデータで補完
+ * ※ClaudeのISBNは間違いが多いため、タイトル検索を優先する
  */
 export async function enrichBook(
   title: string,
   author: string,
   isbn: string | null,
 ): Promise<NDLBook | null> {
-  // 1. ISBNがある場合、まずISBN検索
-  if (isbn) {
-    const byIsbn = await searchNDLByISBN(isbn);
-    if (byIsbn) return byIsbn;
-  }
-
-  // 2. タイトル+著者で検索
+  // 1. タイトル+著者で検索（最も正確）
   const byTitle = await searchNDL(title, author);
   if (byTitle) return byTitle;
 
-  // 3. タイトルのみで検索
+  // 2. タイトルのみで検索
   const byTitleOnly = await searchNDL(title);
   if (byTitleOnly) return byTitleOnly;
 
