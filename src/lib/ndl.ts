@@ -31,13 +31,18 @@ function thumbnailUrl(isbn: string | null): string | null {
 
 /**
  * NDL OpenSearchでタイトル+著者検索
+ * ※NDLのtitleパラメータは長いタイトルだとヒットしないため、
+ *   先頭15文字に切り詰めて部分一致検索する
  */
 export async function searchNDL(
   title: string,
   author?: string,
 ): Promise<NDLBook | null> {
-  const params = new URLSearchParams({ cnt: '3' });
-  if (title) params.set('title', title);
+  // タイトルを短くして検索精度を上げる（NDLは長いタイトルだとヒットしない）
+  const shortTitle = title.length > 15 ? title.slice(0, 15) : title;
+
+  const params = new URLSearchParams({ cnt: '5' });
+  if (shortTitle) params.set('title', shortTitle);
   if (author) params.set('creator', author);
 
   const url = `${NDL_API_BASE}?${params.toString()}`;
