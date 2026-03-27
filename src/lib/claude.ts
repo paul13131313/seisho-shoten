@@ -45,7 +45,7 @@ const SYSTEM_PROMPT = `あなたは「生成書店」の選書AIです。
 
 export async function selectBooks(query: string): Promise<ClaudeResponse> {
   const message = await client.messages.create({
-    model: 'claude-haiku-4-20250414',
+    model: 'claude-3-5-haiku-20241022',
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: [
