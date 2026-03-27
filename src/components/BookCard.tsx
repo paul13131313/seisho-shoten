@@ -7,52 +7,20 @@ interface BookCardProps {
   index: number;
 }
 
-// 本ごとに異なるアクセントカラー
-const BOOK_COLORS = [
-  { bg: '#2c3e50', accent: '#e74c3c', text: '#ecf0f1' },  // ダークネイビー+赤
-  { bg: '#1a472a', accent: '#c9b037', text: '#ecf0f1' },  // ダークグリーン+金
-  { bg: '#4a1942', accent: '#e8d5b7', text: '#ecf0f1' },  // ダークパープル+クリーム
-];
-
-function BookCoverPlaceholder({ title, author, index }: { title: string; author: string; index: number }) {
-  const colors = BOOK_COLORS[index % BOOK_COLORS.length];
-  // タイトルを短く表示（改行用に分割）
-  const displayTitle = title.length > 16 ? title.slice(0, 16) : title;
+function BookCoverPlaceholder({ title, author }: { title: string; author: string }) {
+  const displayTitle = title.length > 20 ? title.slice(0, 20) + '…' : title;
 
   return (
-    <div
-      className="w-full h-full flex flex-col justify-between p-4 relative overflow-hidden"
-      style={{ backgroundColor: colors.bg }}
-    >
-      {/* 上部の装飾ライン */}
-      <div
-        className="absolute top-0 left-0 right-0 h-1.5"
-        style={{ backgroundColor: colors.accent }}
-      />
-
-      {/* タイトル */}
-      <div className="flex-1 flex items-center justify-center pt-4">
-        <p
-          className="text-sm font-bold leading-snug text-center font-[family-name:var(--font-serif)]"
-          style={{ color: colors.text }}
-        >
+    <div className="w-full h-full flex flex-col justify-between p-4 bg-[#f5f0e8] relative">
+      <div className="absolute top-0 left-0 right-0 h-1 bg-[var(--accent)]" />
+      <div className="flex-1 flex items-center justify-center pt-2">
+        <p className="text-sm font-bold leading-snug text-center text-[var(--text)] font-[family-name:var(--font-serif)]">
           {displayTitle}
         </p>
       </div>
-
-      {/* 著者名 */}
-      <p
-        className="text-[10px] text-center opacity-70"
-        style={{ color: colors.text }}
-      >
+      <p className="text-[10px] text-center text-[var(--text-light)]">
         {author}
       </p>
-
-      {/* 下部の装飾ライン */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-1"
-        style={{ backgroundColor: colors.accent, opacity: 0.5 }}
-      />
     </div>
   );
 }
@@ -77,26 +45,25 @@ export default function BookCard({ book, index }: BookCardProps) {
             className="w-full h-full object-contain"
             loading="lazy"
             onError={(e) => {
-              // 書影読み込み失敗時はプレースホルダーに切り替え
               const target = e.target as HTMLImageElement;
               target.style.display = 'none';
               const parent = target.parentElement;
               if (parent) {
-                const colors = BOOK_COLORS[index % BOOK_COLORS.length];
-                parent.style.backgroundColor = colors.bg;
+                parent.style.backgroundColor = '#f5f0e8';
+                const displayTitle = book.title.length > 20 ? book.title.slice(0, 20) + '…' : book.title;
                 parent.innerHTML = `
-                  <div style="width:100%;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:16px;position:relative;overflow:hidden">
-                    <div style="position:absolute;top:0;left:0;right:0;height:6px;background:${colors.accent}"></div>
-                    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding-top:16px">
-                      <p style="color:${colors.text};font-size:14px;font-weight:bold;text-align:center;line-height:1.4">${book.title.slice(0, 16)}</p>
+                  <div style="width:100%;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:16px;position:relative">
+                    <div style="position:absolute;top:0;left:0;right:0;height:4px;background:#8b2500"></div>
+                    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding-top:8px">
+                      <p style="color:#2c2418;font-size:14px;font-weight:bold;text-align:center;line-height:1.4">${displayTitle}</p>
                     </div>
-                    <p style="color:${colors.text};opacity:0.7;font-size:10px;text-align:center">${book.author}</p>
+                    <p style="color:#7a6f63;font-size:10px;text-align:center">${book.author}</p>
                   </div>`;
               }
             }}
           />
         ) : (
-          <BookCoverPlaceholder title={book.title} author={book.author} index={index} />
+          <BookCoverPlaceholder title={book.title} author={book.author} />
         )}
       </div>
 
